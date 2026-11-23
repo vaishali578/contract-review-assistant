@@ -21,7 +21,7 @@ import ReviewSummary from "../components/review/ReviewSummary";
 import FindingCard from "../components/review/FindingCard";
 
 import ClauseViewer from "../components/review/ClauseViewer";
-
+import ChatPanel from "../components/chat/ChatPanel";
 
 function ContractReview() {
 
@@ -256,6 +256,23 @@ function ContractReview() {
         </div>
 
       </section>
+
+      {/* AI Chat */}
+<section className="space-y-4">
+
+  <div>
+    <h2 className="text-xl font-semibold">
+      Contract Assistant
+    </h2>
+
+    <p className="mt-1 text-sm text-slate-500">
+      Ask follow-up questions about this contract.
+    </p>
+  </div>
+
+  <ChatPanel contractId={id} />
+
+</section>
 
 
       {/* Clause viewer modal */}
