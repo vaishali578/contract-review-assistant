@@ -20,7 +20,6 @@ import {
 import Review from "../models/review.model.js";
 
 import ChatMessage from "../models/chatMessage.model.js";
-import Review from "../models/review.model.js";
 
 // Background contract processing
 const processContract = async (contract) => {
