@@ -8,6 +8,9 @@ import {
   getContracts,
   deleteContract,
 } from "../controllers/contract.controller.js";
+import {
+  searchContractChunks,
+} from "../controllers/search.controller.js";
 
 const router = express.Router();
 
@@ -33,4 +36,9 @@ router.delete(
   deleteContract
 );
 
+router.post(
+  "/:id/search",
+  requireUser,
+  searchContractChunks
+);
 export default router;

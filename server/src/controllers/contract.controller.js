@@ -12,6 +12,10 @@ import {
   createChunks,
 } from "../services/chunking.service.js";
 
+import {
+  generateEmbeddings,
+  EMBEDDING_MODEL,
+} from "../services/embedding.service.js";
 
 // Background contract processing
 const processContract = async (contract) => {
@@ -43,7 +47,7 @@ const processContract = async (contract) => {
       throw new Error("No chunks generated");
     }
 
-    // Check whether contract still exists
+    // Step 3: Check whether contract still exists
     const contractExists = await Contract.exists({
       _id: contract._id,
       userId: contract.userId,
@@ -53,22 +57,65 @@ const processContract = async (contract) => {
       return;
     }
 
-    // Step 3: Prepare chunk documents
-    const documents = chunks.map((chunk) => ({
+    // Step 4: Extract text from all chunks
+    const texts = chunks.map((chunk) => chunk.text);
+
+    // Step 5: Generate embeddings using OpenRouter
+    const embeddings = await generateEmbeddings(texts);
+
+    // Validate embedding count
+    if (embeddings.length !== chunks.length) {
+      throw new Error(
+        "Embedding count does not match chunk count"
+      );
+    }
+
+    // Step 6: Prepare MongoDB documents
+    const documents = chunks.map((chunk, index) => ({
       ...chunk,
+
       userId: contract.userId,
       contractId: contract._id,
+
+      embedding: embeddings[index],
+      embeddingModel: EMBEDDING_MODEL,
     }));
 
-    // Step 4: Save chunks in MongoDB
+    // Step 7: Save chunks with embeddings
     await Chunk.insertMany(documents);
 
+    // Check if contract was deleted during processing
+    const stillExists = await Contract.exists({
+      _id: contract._id,
+      userId: contract.userId,
+    });
+
+    if (!stillExists) {
+      await Chunk.deleteMany({
+        contractId: contract._id,
+        userId: contract.userId,
+      });
+
+      return;
+    }
+
     console.log(
-      `Contract processed successfully: ${chunks.length} chunks created`
+      `Contract processed successfully:
+      ${chunks.length} chunks created
+      ${embeddings.length} embeddings generated`
     );
 
   } catch (error) {
+
     console.error("Contract processing failed:", error);
+
+    // Clean up any partially saved chunks
+    await Chunk.deleteMany({
+      contractId: contract._id,
+      userId: contract.userId,
+    }).catch((dbError) => {
+      console.error("Chunk cleanup failed:", dbError);
+    });
 
     // Mark contract as failed
     await Contract.updateOne(
@@ -82,7 +129,10 @@ const processContract = async (contract) => {
         },
       }
     ).catch((dbError) => {
-      console.error("Failed to update contract status:", dbError);
+      console.error(
+        "Failed to update contract status:",
+        dbError
+      );
     });
   }
 };
