@@ -11,6 +11,12 @@ import {
 import {
   searchContractChunks,
 } from "../controllers/search.controller.js";
+import {
+  runContractReview,
+} from "../services/review.service.js";
+import {
+  getContractReview,
+} from "../controllers/review.controller.js";
 
 const router = express.Router();
 
@@ -41,4 +47,11 @@ router.post(
   requireUser,
   searchContractChunks
 );
+
+router.get(
+  "/:id/review",
+  requireUser,
+  getContractReview
+);
+
 export default router;
