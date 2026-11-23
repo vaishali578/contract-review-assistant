@@ -19,6 +19,9 @@ import {
 
 import Review from "../models/review.model.js";
 
+import ChatMessage from "../models/chatMessage.model.js";
+import Review from "../models/review.model.js";
+
 // Background contract processing
 const processContract = async (contract) => {
     try {
@@ -223,8 +226,10 @@ export const getContracts = async (req, res) => {
 
 
 // Delete contract
+
 export const deleteContract = async (req, res) => {
     try {
+        // Find contract belonging to the logged-in user
         const contract = await Contract.findOne({
             _id: req.params.id,
             userId: req.userId,
@@ -237,21 +242,29 @@ export const deleteContract = async (req, res) => {
             });
         }
 
+        // Get uploaded file path
         const filePath = path.resolve(
             process.cwd(),
             contract.filePath
         );
 
-        await Review.deleteOne({
-            contractId: contract._id,
-            userId: req.userId,
-        });
+        // Delete all associated data
+        await Promise.all([
+            Chunk.deleteMany({
+                contractId: contract._id,
+                userId: req.userId,
+            }),
 
-        // Delete associated chunks
-        await Chunk.deleteMany({
-            contractId: contract._id,
-            userId: req.userId,
-        });
+            Review.deleteOne({
+                contractId: contract._id,
+                userId: req.userId,
+            }),
+
+            ChatMessage.deleteMany({
+                contractId: contract._id,
+                userId: req.userId,
+            }),
+        ]);
 
         // Delete contract document
         await Contract.deleteOne({

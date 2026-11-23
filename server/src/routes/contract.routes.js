@@ -17,6 +17,13 @@ import {
 import {
   getContractReview,
 } from "../controllers/review.controller.js";
+import {
+  sendContractMessage,
+} from "../controllers/chat.controller.js";
+
+import {
+  getContractChatHistory,
+} from "../controllers/chatHistory.controller.js";
 
 const router = express.Router();
 
@@ -52,6 +59,20 @@ router.get(
   "/:id/review",
   requireUser,
   getContractReview
+);
+
+// Send message with SSE streaming
+router.post(
+  "/:id/chat",
+  requireUser,
+  sendContractMessage
+);
+
+// Get previous chat messages
+router.get(
+  "/:id/chat",
+  requireUser,
+  getContractChatHistory
 );
 
 export default router;
