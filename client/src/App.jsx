@@ -1,39 +1,45 @@
 import {
-  Show,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-} from "@clerk/react";
+  BrowserRouter,
+  Routes,
+  Route,
+} from "react-router-dom";
+
+import LandingPage from "./pages/LandingPage";
+import Dashboard from "./pages/Dashboard";
+import ContractReview from "./pages/ContractReview";
+
+import ProtectedRoute from "./components/layout/ProtectedRoute";
+import AppLayout from "./components/layout/AppLayout";
 
 function App() {
   return (
-    <div>
-      <header>
-        <h2>Contract Review Assistant</h2>
+    <BrowserRouter>
 
-        <Show when="signed-out">
-          <SignInButton mode="modal">
-            <button>Sign In</button>
-          </SignInButton>
+      <Routes>
 
-          <SignUpButton mode="modal">
-            <button>Sign Up</button>
-          </SignUpButton>
-        </Show>
+        {/* Public route */}
+        <Route path="/" element={<LandingPage />} />
 
-        <Show when="signed-in">
-          <UserButton />
-        </Show>
-      </header>
+        {/* Protected routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
 
-      <main>
-        <h1>AI Contract Review Assistant</h1>
-        <p>
-          Upload your contract and let AI review
-          its important clauses.
-        </p>
-      </main>
-    </div>
+            <Route
+              path="/dashboard"
+              element={<Dashboard />}
+            />
+
+            <Route
+              path="/contracts/:id"
+              element={<ContractReview />}
+            />
+
+          </Route>
+        </Route>
+
+      </Routes>
+
+    </BrowserRouter>
   );
 }
 
