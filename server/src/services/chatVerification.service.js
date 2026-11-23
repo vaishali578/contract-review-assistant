@@ -10,7 +10,15 @@ export const verifyChatAnswer = (aiResult, evidence) => {
     "unclear",
   ];
 
-  if (!allowedStatuses.includes(aiResult.status)) {
+  if (!Array.isArray(evidence) || evidence.length === 0) {
+    return {
+      status: "unclear",
+      answer: "There was not enough contract text to verify an answer.",
+      quote: "",
+    };
+  }
+
+  if (!aiResult || !allowedStatuses.includes(aiResult.status)) {
     return {
       status: "unclear",
       answer: "I could not verify the answer from the contract.",
@@ -38,15 +46,28 @@ export const verifyChatAnswer = (aiResult, evidence) => {
   }
 
   // Find the exact source chunk
-  const sourceChunk = evidence.find(
+  const quote = typeof aiResult.quote === "string"
+    ? aiResult.quote.trim()
+    : "";
+  let sourceChunk = evidence.find(
     (chunk) =>
       Number.isInteger(aiResult.sourceChunkIndex) &&
       chunk.chunkIndex === aiResult.sourceChunkIndex
   );
 
-  const quote = aiResult.quote?.trim() || "";
+  if (!sourceChunk && quote) {
+    const normalizedQuote = normalizeText(quote);
+    sourceChunk = evidence.find((chunk) =>
+      normalizeText(chunk.text).includes(normalizedQuote)
+    );
+  }
 
-  if (!sourceChunk || !quote) {
+  if (
+    !sourceChunk ||
+    !quote ||
+    typeof aiResult.answer !== "string" ||
+    !aiResult.answer.trim()
+  ) {
     return {
       status: "unclear",
       answer: "The quoted clause could not be verified.",
@@ -72,7 +93,7 @@ export const verifyChatAnswer = (aiResult, evidence) => {
   return {
     status: "answered",
 
-    answer: aiResult.answer,
+    answer: aiResult.answer.trim(),
 
     quote,
 

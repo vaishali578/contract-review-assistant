@@ -37,10 +37,12 @@ function ChatPanel({ contractId }) {
       );
 
       setMessages(response.messages);
+      return true;
 
     } catch (error) {
 
       setError(error.message);
+      return false;
 
     }
 
@@ -191,6 +193,9 @@ function ChatPanel({ contractId }) {
           (message) => !message.isStreaming
         )
       );
+      if (await loadHistory()) {
+        setError("");
+      }
 
     } finally {
 

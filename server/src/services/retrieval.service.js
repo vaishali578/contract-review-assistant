@@ -7,6 +7,58 @@ import {
   generateEmbeddings,
 } from "./embedding.service.js";
 
+const escapeRegex = (value) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const STOP_WORDS = new Set([
+  "about", "and", "are", "can", "does", "for", "from", "have",
+  "how", "not", "our", "the", "that", "there", "they", "this",
+  "was", "what", "when", "where", "which", "who", "why", "with",
+  "would", "you", "your",
+]);
+
+const retrieveLexicalChunks = async ({
+  query,
+  userId,
+  contractId,
+  limit,
+}) => {
+  const terms = [...new Set(
+    query.toLowerCase().match(/[a-z0-9]{3,}/g) || []
+  )]
+    .filter((term) => !STOP_WORDS.has(term))
+    .slice(0, 12);
+
+  if (terms.length === 0) return [];
+
+  const chunks = await Chunk.find({
+    userId,
+    contractId,
+    $or: terms.map((term) => ({
+      text: { $regex: escapeRegex(term), $options: "i" },
+    })),
+  })
+    .select("text pageNumber section chunkIndex")
+    .sort({ chunkIndex: 1 })
+    .limit(200)
+    .lean();
+
+  return chunks
+    .map((chunk) => ({
+      chunk,
+      matchCount: terms.reduce(
+        (count, term) =>
+          count + Number(chunk.text.toLowerCase().includes(term)),
+        0
+      ),
+    }))
+    .sort((a, b) =>
+      b.matchCount - a.matchCount ||
+      a.chunk.chunkIndex - b.chunk.chunkIndex
+    )
+    .slice(0, limit)
+    .map(({ chunk }) => chunk);
+};
 
 export const retrieveRelevantChunks = async ({
   query,
@@ -16,7 +68,7 @@ export const retrieveRelevantChunks = async ({
 }) => {
 
   // Validate inputs
-  if (!query?.trim()) {
+  if (typeof query !== "string" || !query.trim()) {
     throw new Error("Search query is required");
   }
 
@@ -36,46 +88,51 @@ export const retrieveRelevantChunks = async ({
     throw error;
   }
 
-  // Step 1: Convert user question into embedding
-  const [queryEmbedding] = await generateEmbeddings([
-    query,
-  ]);
+  const contractObjectId = new mongoose.Types.ObjectId(contractId);
 
-  // Step 2: Search relevant chunks
-  const results = await Chunk.aggregate([
-    {
-      $vectorSearch: {
-        index: "contract_chunks_vector_index",
+  try {
+    // Step 1: Convert user question into an embedding
+    const [queryEmbedding] = await generateEmbeddings([query]);
+    if (!queryEmbedding) {
+      throw new Error("Embedding service returned no query vector");
+    }
 
-        path: "embedding",
-
-        queryVector: queryEmbedding,
-
-        numCandidates: Math.max(limit * 20, 100),
-
-        limit,
-
-        // Security filters
-        filter: {
-          userId,
-          contractId: new mongoose.Types.ObjectId(contractId),
+    // Step 2: Search relevant chunks using the contract- and user-scoped index
+    return await Chunk.aggregate([
+      {
+        $vectorSearch: {
+          index: "contract_chunks_vector_index",
+          path: "embedding",
+          queryVector: queryEmbedding,
+          numCandidates: Math.max(limit * 20, 100),
+          limit,
+          filter: {
+            userId,
+            contractId: contractObjectId,
+          },
         },
       },
-    },
-
-    {
-      $project: {
-        text: 1,
-        pageNumber: 1,
-        section: 1,
-        chunkIndex: 1,
-
-        score: {
-          $meta: "vectorSearchScore",
+      {
+        $project: {
+          text: 1,
+          pageNumber: 1,
+          section: 1,
+          chunkIndex: 1,
+          score: { $meta: "vectorSearchScore" },
         },
       },
-    },
-  ]);
+    ]);
+  } catch (error) {
+    console.warn(
+      "Vector retrieval unavailable; falling back to contract text search:",
+      error.message
+    );
+    return retrieveLexicalChunks({
+      query,
+      userId,
+      contractId: contractObjectId,
+      limit,
+    });
+  }
 
-  return results;
 };

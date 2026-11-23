@@ -1,3 +1,32 @@
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+const dispatchEventBlock = (block, onEvent) => {
+  if (!block.trim()) return;
+
+  const lines = block.split(/\r?\n/);
+  let eventName = "message";
+  const dataLines = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      eventName = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trim());
+    }
+  }
+
+  if (dataLines.length === 0) return;
+
+  let data;
+  try {
+    data = JSON.parse(dataLines.join("\n"));
+  } catch {
+    throw new Error("Received an invalid chat stream response");
+  }
+
+  onEvent(eventName, data);
+};
+
 export const sendChatMessage = async ({
   contractId,
   question,
@@ -6,9 +35,12 @@ export const sendChatMessage = async ({
 }) => {
 
   const token = await getToken();
+  if (!token) {
+    throw new Error("Authentication required");
+  }
 
   const response = await fetch(
-    `http://localhost:5000/api/contracts/${contractId}/chat`,
+    `${API_URL}/api/contracts/${contractId}/chat`,
     {
       method: "POST",
 
@@ -24,10 +56,10 @@ export const sendChatMessage = async ({
   );
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => null);
 
     throw new Error(
-      error.message || "Failed to send message"
+      error?.message || "Failed to send message"
     );
   }
 
@@ -58,38 +90,13 @@ export const sendChatMessage = async ({
       buffer = events.pop() || "";
 
       for (const block of events) {
-
-        if (!block.trim()) continue;
-
-        const lines = block.split(/\r?\n/);
-
-        let eventName = "message";
-        const dataLines = [];
-
-        for (const line of lines) {
-
-          if (line.startsWith("event:")) {
-            eventName = line.slice(6).trim();
-          }
-
-          if (line.startsWith("data:")) {
-            dataLines.push(line.slice(5).trim());
-          }
-        }
-
-        if (dataLines.length === 0) continue;
-
-        try {
-          const data = JSON.parse(
-            dataLines.join("\n")
-          );
-
-          onEvent(eventName, data);
-
-        } catch (error) {
-          console.error("SSE parsing error:", error);
-        }
+        dispatchEventBlock(block, onEvent);
       }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      dispatchEventBlock(buffer, onEvent);
     }
 
   } finally {

@@ -18,6 +18,7 @@ import {
 } from "../services/embedding.service.js";
 
 import Review from "../models/review.model.js";
+import { runContractReview } from "../services/review.service.js";
 
 import ChatMessage from "../models/chatMessage.model.js";
 
@@ -124,6 +125,14 @@ const processContract = async (contract) => {
             console.error("Chunk cleanup failed:", dbError);
         });
 
+        const errorCode = `${error?.code || ""} ${error?.message || ""}`;
+        const processingError = errorCode.includes("RATE_LIMIT")
+            ? "An AI provider is rate-limited. Please try processing this contract again later."
+            : errorCode.includes("PROVIDER_UNAVAILABLE") ||
+                errorCode.includes("EMBEDDING_NETWORK_ERROR")
+                ? "An AI provider is temporarily unavailable. Please try again later."
+                : "Contract processing failed. Please try again.";
+
         // Mark contract as failed
         await Contract.updateOne(
             {
@@ -133,6 +142,7 @@ const processContract = async (contract) => {
             {
                 $set: {
                     status: "failed",
+                    processingError,
                 },
             }
         ).catch((dbError) => {

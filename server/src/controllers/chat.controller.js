@@ -16,10 +16,29 @@ import {
 
 // SSE helper
 const sendEvent = (res, event, data) => {
-  if (res.writableEnded) return;
+  if (res.writableEnded || res.destroyed) return;
 
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
+
+const getChatErrorMessage = (error) => {
+  if (error.code === "AI_RATE_LIMIT") {
+    const retrySeconds = Number.isFinite(error.retryAfterMs) &&
+      error.retryAfterMs > 0
+      ? Math.ceil(error.retryAfterMs / 1000)
+      : null;
+
+    return retrySeconds
+      ? `AI providers are rate-limited. Please try again in about ${retrySeconds} seconds.`
+      : "AI providers are rate-limited. Please try again later.";
+  }
+
+  if (error.code === "AI_PROVIDER_UNAVAILABLE") {
+    return "AI service is temporarily unavailable. Please try again shortly.";
+  }
+
+  return "Unable to process your question. Please try again.";
 };
 
 
@@ -111,6 +130,7 @@ export const sendContractMessage = async (req, res) => {
       question: question.trim(),
       evidence,
       signal: controller.signal,
+      onStatus: (message) => sendEvent(res, "status", { message }),
     });
 
     if (controller.signal.aborted) return;
@@ -194,12 +214,24 @@ export const sendContractMessage = async (req, res) => {
     }
 
     if (res.headersSent) {
+      const message = getChatErrorMessage(error);
+
+      if (userMessage) {
+        try {
+          await ChatMessage.create({
+            userId: req.userId,
+            contractId: userMessage.contractId,
+            role: "assistant",
+            content: message,
+            status: "error",
+          });
+        } catch (saveError) {
+          console.error("Failed to save chat error message:", saveError);
+        }
+      }
 
       sendEvent(res, "error", {
-        message:
-          error.message.includes("AI_RATE_LIMIT")
-            ? "AI service is busy. Please try again later."
-            : "Unable to process your question. Please try again.",
+        message,
       });
 
       res.end();
@@ -208,7 +240,9 @@ export const sendContractMessage = async (req, res) => {
 
       return res.status(500).json({
         success: false,
-        message: "Unable to process chat request",
+        message: error.code === "AI_RATE_LIMIT"
+          ? getChatErrorMessage(error)
+          : "Unable to process chat request",
       });
     }
   }

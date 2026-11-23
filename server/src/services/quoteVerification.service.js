@@ -15,6 +15,19 @@ export const verifyReviewFindings = (
             (item) => item.key === checklistItem.key
         );
 
+        const candidates = evidenceByKey[checklistItem.key] || [];
+
+        if (candidates.length === 0) {
+            return {
+                key: checklistItem.key,
+                label: checklistItem.label,
+                status: "unclear",
+                summary: "There was not enough contract text to verify this item.",
+                quote: "",
+                fullClause: "",
+            };
+        }
+
         // AI missed this checklist item
         if (!aiItem) {
             return {
@@ -46,13 +59,20 @@ export const verifyReviewFindings = (
             ? aiItem.sourceChunkIndex
             : -1;
 
-        const candidates = evidenceByKey[checklistItem.key] || [];
-
-        const sourceChunk = candidates.find(
+        const quote = aiItem.quote?.trim() || "";
+        let sourceChunk = candidates.find(
             (chunk) => chunk.chunkIndex === sourceIndex
         );
 
-        const quote = aiItem.quote?.trim() || "";
+        // A model may return an evidence-array position instead of the
+        // database chunk index. If the quote is exact, locate it in the
+        // supplied candidates rather than rejecting a valid finding.
+        if (!sourceChunk && quote) {
+            const normalizedQuote = normalizeWhitespace(quote);
+            sourceChunk = candidates.find((chunk) =>
+                normalizeWhitespace(chunk.text).includes(normalizedQuote)
+            );
+        }
 
         // Missing source or quotation
         if (!sourceChunk || !quote) {
