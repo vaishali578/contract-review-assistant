@@ -2,7 +2,9 @@ import "dotenv/config";
 
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 import helmet from "helmet";
+import contractRoutes from "./routes/contract.routes.js";
 
 import {
   clerkMiddleware,
@@ -44,6 +46,29 @@ app.get("/api/auth/me", (req, res) => {
     userId,
     message: "Authenticated successfully",
   });
+});
+
+app.use("/api/contracts", contractRoutes);
+
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({
+        success: false,
+        message: "File size cannot exceed 20 MB",
+      });
+    }
+  }
+
+  if (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message || "Something went wrong",
+    });
+  }
+
+  next();
 });
 
 export default app;
